@@ -205,6 +205,14 @@ input {
                 <p>Email:{{i.Email}}</p>
                 <p class="product-price">Phone:{{i.Contact}}</p>
                 <p class="product-price">Qualification:{{i.Qualify}}</p>
+                {% if i.video_url %}
+                <video width="240" height="160" controls>
+                  <source src="{{ i.video_url }}" type="video/mp4">
+                  Your browser does not support the video tag.
+                </video>
+                {% else %}
+                <p>No introduction video available.</p>
+                {% endif %}
             </form>
 
             </div>
