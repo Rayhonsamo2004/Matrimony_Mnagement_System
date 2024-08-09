@@ -127,7 +127,20 @@ def profile1():
         session['mail'] = email
         session['phone'] = contact
         session['loggedin'] = True
+        video = request.files["video"]
+        user_id = session["id"]
         
+        # Save video to Firebase Storage
+        bucket = storage.bucket()
+        blob = bucket.blob(f"videos/{user_id}.mp4")
+        blob.upload_from_file(video)
+        blob.make_public()
+        video_url = blob.public_url
+        
+        # Update user profile in Firestore with video URL
+        db.collection("profile").document(user_id).update({"video_url": video_url})
+        
+        flash("Video uploaded successfully", category="success")
         cam = cv2.VideoCapture(0)
         while True:
             ret, frame = cam.read()
@@ -273,7 +286,6 @@ def feedback():
             'Comment': comment,
             'Rating': rating
         })
-
         return redirect(url_for("feedback"))
     return render_template("feedback.html")
 @app.route("/all_profile", methods=["GET", "POST"])
@@ -295,6 +307,66 @@ def all_profile():
     print(res)
     return render_template("card.html", data=res)
 
+
+@app.route("/admin_login", methods=['GET', 'POST'])
+def admin_login():
+    if request.method == "POST" and 'username' in request.form and 'password' in request.form:
+        username = request.form['username']
+        password = request.form['password']
+
+        # Assuming admin credentials are stored in Firestore
+        admin_ref = db.collection('admin').where('username', '==', username).where('password', '==', password).stream()
+        admin = None
+        for doc in admin_ref:
+            admin = doc.to_dict()
+
+        if admin:
+            session['admin_logged_in'] = True
+            session['admin_username'] = username
+            flash("Admin login successful", category="success")
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash("Invalid credentials", category="danger")
+    return render_template("admin_login.html")
+
+
+@app.route("/admin_dashboard")
+def admin_dashboard():
+    if 'admin_logged_in' in session:
+        # Fetch some basic statistics
+        total_users = len([doc for doc in db.collection('login').stream()])
+        total_profiles = len([doc for doc in db.collection('profile').stream()])
+        total_payments = len([doc for doc in db.collection('payment').stream()])
+
+        stats = {
+            'total_users': total_users,
+            'total_profiles': total_profiles,
+            'total_payments': total_payments
+        }
+
+        return render_template("admin_dashboard.html", stats=stats)
+    else:
+        flash("Please log in as an admin first", category="danger")
+        return redirect(url_for("admin_login"))
+
+@app.route("/admin_users")
+def admin_users():
+    if 'admin_logged_in' in session:
+        users = [doc.to_dict() for doc in db.collection('login').stream()]
+        print(users)
+        return render_template("user_manage.html", users=users)
+    else:
+        flash("Please log in as an admin first", category="danger")
+        return redirect(url_for("admin_login"))
+
+@app.route("/delete_user/<string:user_id>")
+def delete_user(user_id):
+    if 'admin_logged_in' in session:
+        db.collection("login").document(user_id).delete()
+        flash("user deleted successfully",category='danger')
+        return render_template("manage_user.html")
+    else:
+        return render_template("admin_login.html")
 
 if __name__=="__main__":
     app.run(debug=False,host='0.0.0.0')
